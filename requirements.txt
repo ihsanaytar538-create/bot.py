@@ -1,1 +1,3 @@
-pip install -U discord.py yt-dlp
+discord.py
+yt-dlp
+PyNaCl
