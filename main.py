@@ -31,7 +31,7 @@ def get_spotify_token():
     result = response.json()
 
     if "access_token" not in result:
-        print("Spotify Token Error:", result)
+        print("❌ Spotify Token Error:", result)
         return None
 
     return result["access_token"]
@@ -54,8 +54,10 @@ def get_track_info(track_id):
     response = requests.get(url, headers=headers)
     data = response.json()
 
+    print("SPOTIFY RESPONSE:", data)  # DEBUG
+
     if "name" not in data:
-        print("Spotify Track Error:", data)
+        print("❌ Invalid track response:", data)
         return None
 
     song_name = data["name"]
@@ -90,8 +92,8 @@ async def on_message(message):
 
     print("MESSAGE:", message.content)
 
-    # ROBUSTER SPOTIFY MATCH (wichtig!)
-    match = re.search(r"track/([a-zA-Z0-9]+)", message.content)
+    # 🔥 ROBUSTER SPOTIFY LINK FIX (WICHTIG)
+    match = re.search(r"spotify\.com/.*/track/([a-zA-Z0-9]+)", message.content)
 
     if not match:
         return
