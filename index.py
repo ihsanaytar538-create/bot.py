@@ -1,74 +1,78 @@
-const { Client, GatewayIntentBits } = require("discord.js");
-const {
-    joinVoiceChannel,
-    createAudioPlayer,
-    createAudioResource,
-    AudioPlayerStatus
-} = require("@discordjs/voice");
+import discord
+from discord.ext import commands
+import yt_dlp
+import asyncio
 
-const ytdl = require("ytdl-core");
+intents = discord.Intents.default()
+intents.message_content = True
+intents.voice_states = True
 
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
-});
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-const prefix = "!";
+current_votes = {}
+required_votes = 2  # kann geändert werden
 
-client.on("messageCreate", async (message) => {
-    if (!message.content.startsWith(prefix) || message.author.bot) return;
+class MusicView(discord.ui.View):
+    def __init__(self, url, ctx):
+        super().__init__(timeout=60)
+        self.url = url
+        self.ctx = ctx
+        self.voters = set()
 
-    const args = message.content.split(" ");
-    const command = args[0];
+    @discord.ui.button(label="▶️ Play", style=discord.ButtonStyle.green)
+    async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-    // !play <youtube link>
-    if (command === "!play") {
-        const url = args[1];
-        if (!url) return message.reply("Bitte YouTube-Link angeben!");
+        user = interaction.user
 
-        const voiceChannel = message.member.voice.channel;
-        if (!voiceChannel) return message.reply("Du bist in keinem Voice-Channel!");
+        if user.id in self.voters:
+            await interaction.response.send_message("❌ Du hast schon gevotet!", ephemeral=True)
+            return
 
-        const connection = joinVoiceChannel({
-            channelId: voiceChannel.id,
-            guildId: message.guild.id,
-            adapterCreator: message.guild.voiceAdapterCreator
-        });
+        self.voters.add(user.id)
+        votes = len(self.voters)
 
-        const stream = ytdl(url, { filter: "audioonly" });
-        const resource = createAudioResource(stream);
-        const player = createAudioPlayer();
+        await interaction.response.send_message(f"👍 Vote gezählt! ({votes}/{required_votes})", ephemeral=True)
 
-        player.play(resource);
-        connection.subscribe(player);
+        if votes >= required_votes:
+            await self.start_music(interaction)
 
-        player.on(AudioPlayerStatus.Playing, () => {
-            message.channel.send("🎶 Musik wird abgespielt!");
-        });
+    async def start_music(self, interaction):
+        vc = self.ctx.voice_client
 
-        player.on(AudioPlayerStatus.Idle, () => {
-            connection.destroy();
-        });
-    }
+        if not vc:
+            channel = self.ctx.author.voice.channel
+            vc = await channel.connect()
 
-    // !stop
-    if (command === "!stop") {
-        const voiceChannel = message.member.voice.channel;
-        if (!voiceChannel) return;
+        ydl_opts = {'format': 'bestaudio'}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(self.url, download=False)
+            audio_url = info['url']
 
-        const connection = joinVoiceChannel({
-            channelId: voiceChannel.id,
-            guildId: message.guild.id,
-            adapterCreator: message.guild.voiceAdapterCreator
-        });
+        source = await discord.FFmpegOpusAudio.from_probe(audio_url)
 
-        connection.destroy();
-        message.channel.send("⏹️ Musik gestoppt!");
-    }
-});
+        vc.stop()
+        vc.play(source)
 
-client.login("DEIN_BOT_TOKEN");
+        await interaction.channel.send("🎶 Musik gestartet!")
+
+        self.stop()
+
+
+@bot.command()
+async def play(ctx, url: str):
+
+    if not ctx.author.voice:
+        return await ctx.send("❌ Du bist in keinem Voice Channel!")
+
+    view = MusicView(url, ctx)
+
+    await ctx.send("🎵 Song bereit! Drücke ▶️ um zu starten (2 Votes nötig)", view=view)
+
+
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("⏹️ Gestoppt")
+
+bot.run("DEIN_BOT_TOKEN")
