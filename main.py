@@ -1,139 +1,139 @@
 import discord
-import os
+from discord.ext import commands
+import yt_dlp
 import re
-import requests
-import traceback
 
-# =========================
-# TOKENS
-# =========================
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = "DEIN_DISCORD_TOKEN"
 
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
-SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-
-# =========================
-# SPOTIFY TOKEN
-# =========================
-def get_spotify_token():
-    url = "https://accounts.spotify.com/api/token"
-
-    data = {
-        "grant_type": "client_credentials"
-    }
-
-    response = requests.post(
-        url,
-        data=data,
-        auth=(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
-    )
-
-    result = response.json()
-
-    if "access_token" not in result:
-        print("❌ Spotify Token Error:", result)
-        return None
-
-    return result["access_token"]
-
-# =========================
-# TRACK INFO
-# =========================
-def get_track_info(track_id):
-    token = get_spotify_token()
-
-    if not token:
-        return None
-
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-
-    url = f"https://api.spotify.com/v1/tracks/{track_id}"
-
-    response = requests.get(url, headers=headers)
-    data = response.json()
-
-    print("SPOTIFY RESPONSE:", data)  # DEBUG
-
-    if "name" not in data:
-        print("❌ Invalid track response:", data)
-        return None
-
-    song_name = data["name"]
-    artist = data["artists"][0]["name"]
-    cover = data["album"]["images"][0]["url"]
-
-    return song_name, artist, cover
-
-# =========================
-# DISCORD SETUP
-# =========================
 intents = discord.Intents.default()
 intents.message_content = True
 
-client = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-# =========================
+# -------------------------
+# YTDL SETUP
+# -------------------------
+ytdl_opts = {
+    "format": "bestaudio/best",
+    "noplaylist": True,
+    "quiet": True,
+}
+
+ffmpeg_opts = {
+    "options": "-vn"
+}
+
+ytdl = yt_dlp.YoutubeDL(ytdl_opts)
+
+queue = []
+
+
+# -------------------------
+# SEARCH / EXTRACT
+# -------------------------
+def get_source(query):
+    info = ytdl.extract_info(query, download=False)
+
+    if "entries" in info:
+        info = info["entries"][0]
+
+    return info["url"], info["title"]
+
+
+# -------------------------
+# JOIN VOICE
+# -------------------------
+async def join_voice(ctx):
+    if ctx.author.voice is None:
+        await ctx.send("❌ Du bist in keinem Voice Channel")
+        return None
+
+    channel = ctx.author.voice.channel
+
+    if ctx.voice_client is None:
+        return await channel.connect()
+    else:
+        return ctx.voice_client
+
+
+# -------------------------
+# PLAY NEXT IN QUEUE
+# -------------------------
+async def play_next(ctx):
+    if len(queue) == 0:
+        return
+
+    url = queue.pop(0)
+    voice = ctx.voice_client
+
+    stream_url, title = get_source(url)
+
+    source = await discord.FFmpegOpusAudio.from_probe(
+        stream_url,
+        **ffmpeg_opts
+    )
+
+    voice.play(source, after=lambda e: bot.loop.create_task(play_next(ctx)))
+
+
+# -------------------------
+# COMMAND: PLAY
+# -------------------------
+@bot.command()
+async def play(ctx, *, query):
+    voice = await join_voice(ctx)
+    if voice is None:
+        return
+
+    # Spotify Link → nur als Suchquery nutzen
+    spotify_match = re.search(r"track/([a-zA-Z0-9]+)", query)
+    if spotify_match:
+        query = f"ytsearch:{query}"
+
+    queue.append(query)
+
+    if not voice.is_playing():
+        await play_next(ctx)
+
+    await ctx.send(f"🎵 Hinzugefügt zur Queue: `{query}`")
+
+
+# -------------------------
+# SKIP
+# -------------------------
+@bot.command()
+async def skip(ctx):
+    if ctx.voice_client and ctx.voice_client.is_playing():
+        ctx.voice_client.stop()
+        await ctx.send("⏭ Skip")
+
+
+# -------------------------
+# STOP
+# -------------------------
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client:
+        queue.clear()
+        ctx.voice_client.stop()
+        await ctx.send("⛔ Stopped + Queue geleert")
+
+
+# -------------------------
+# LEAVE
+# -------------------------
+@bot.command()
+async def leave(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+
+
+# -------------------------
 # READY
-# =========================
-@client.event
+# -------------------------
+@bot.event
 async def on_ready():
-    print(f"✅ Bot online als {client.user}")
+    print(f"✅ Bot online als {bot.user}")
 
-# =========================
-# MESSAGE EVENT
-# =========================
-@client.event
-async def on_message(message):
 
-    if message.author.bot:
-        return
-
-    print("MESSAGE:", message.content)
-
-    # 🔥 ROBUSTER SPOTIFY LINK FIX (WICHTIG)
-    match = re.search(r"spotify\.com/.*/track/([a-zA-Z0-9]+)", message.content)
-
-    if not match:
-        return
-
-    track_id = match.group(1)
-
-    try:
-        result = get_track_info(track_id)
-
-        if not result:
-            await message.reply("❌ Spotify API Fehler")
-            return
-
-        song_name, artist, cover = result
-
-        audio_path = "songs/song.mp3"
-
-        if not os.path.exists(audio_path):
-            await message.reply("❌ keine mp3 gefunden")
-            return
-
-        file = discord.File(audio_path)
-
-        embed = discord.Embed(
-            title="🎵 Spotify Song erkannt",
-            description=f"**{song_name}**\nvon {artist}",
-            color=0x1DB954
-        )
-
-        embed.set_thumbnail(url=cover)
-        embed.add_field(name="Spotify Link", value=message.content, inline=False)
-        embed.set_footer(text="▶ Bot aktiv")
-
-        await message.channel.send(embed=embed, file=file)
-
-    except Exception:
-        print(traceback.format_exc())
-        await message.reply("❌ Fehler beim Verarbeiten")
-
-# =========================
-# START
-# =========================
-client.run(DISCORD_TOKEN)
+bot.run(TOKEN)
