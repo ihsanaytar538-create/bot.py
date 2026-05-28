@@ -12,6 +12,11 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 # =========================
+# NUR DIESER CHANNEL IST ERLAUBT
+# =========================
+ALLOWED_CHANNEL_ID = int(os.getenv("1509380855586361454"))
+
+# =========================
 # SPOTIFY TOKEN HOLEN
 # =========================
 def get_spotify_token():
@@ -29,7 +34,6 @@ def get_spotify_token():
     )
 
     result = response.json()
-
     return result["access_token"]
 
 # =========================
@@ -45,11 +49,7 @@ def get_track_info(track_id):
 
     url = f"https://api.spotify.com/v1/tracks/{track_id}"
 
-    response = requests.get(
-        url,
-        headers=headers
-    )
-
+    response = requests.get(url, headers=headers)
     data = response.json()
 
     song_name = data["name"]
@@ -79,16 +79,17 @@ async def on_ready():
 @client.event
 async def on_message(message):
 
+    # Bot ignoriert sich selbst
     if message.author.bot:
+        return
+
+    # ❌ nur erlaubter channel
+    if message.channel.id != ALLOWED_CHANNEL_ID:
         return
 
     text = message.content
 
-    # =========================
-    # SPOTIFY LINK CHECK
-    # =========================
     spotify_regex = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
-
     match = re.search(spotify_regex, text)
 
     if match:
@@ -96,22 +97,16 @@ async def on_message(message):
         track_id = match.group(1)
 
         try:
-
-            # SONG DATEN HOLEN
             song_name, artist, cover = get_track_info(track_id)
 
-            # AUDIO DATEI
             audio_path = "songs/song.mp3"
 
-            # EXISTIERT DIE DATEI?
             if not os.path.exists(audio_path):
                 await message.reply("❌ keine mp3 gefunden")
                 return
 
-            # DATEI SENDEN
             file = discord.File(audio_path)
 
-            # EMBED
             embed = discord.Embed(
                 title="🎵 spotify song erkannt",
                 description=f"**{song_name}**\nvon {artist}",
@@ -126,15 +121,9 @@ async def on_message(message):
                 inline=False
             )
 
-            embed.set_footer(
-                text="▶ direkt im discord chat abspielbar"
-            )
+            embed.set_footer(text="▶ direkt im discord chat abspielbar")
 
-            # SENDEN
-            await message.channel.send(
-                embed=embed,
-                file=file
-            )
+            await message.channel.send(embed=embed, file=file)
 
         except Exception as e:
             print(e)
