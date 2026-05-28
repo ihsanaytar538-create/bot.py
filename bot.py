@@ -4,20 +4,12 @@ import re
 import requests
 
 # =========================
-# DISCORD TOKEN
+# TOKENS AUS RAILWAY
 # =========================
-DISCORD_TOKEN = "DEIN_DISCORD_TOKEN"
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-# =========================
-# GROQCLOUD KEY
-# =========================
-GROQ_API_KEY = "DEIN_GROQCLOUD_API_KEY"
-
-# =========================
-# SPOTIFY API
-# =========================
-SPOTIFY_CLIENT_ID = "DEINE_SPOTIFY_CLIENT_ID"
-SPOTIFY_CLIENT_SECRET = "DEIN_SPOTIFY_CLIENT_SECRET"
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 # =========================
 # SPOTIFY TOKEN HOLEN
@@ -105,18 +97,18 @@ async def on_message(message):
 
         try:
 
-            # SONG DATEN
+            # SONG DATEN HOLEN
             song_name, artist, cover = get_track_info(track_id)
 
-            # MP3 DATEI
+            # AUDIO DATEI
             audio_path = "songs/song.mp3"
 
-            # DATEI EXISTIERT?
+            # EXISTIERT DIE DATEI?
             if not os.path.exists(audio_path):
                 await message.reply("❌ keine mp3 gefunden")
                 return
 
-            # DISCORD DATEI
+            # DATEI SENDEN
             file = discord.File(audio_path)
 
             # EMBED
