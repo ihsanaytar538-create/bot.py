@@ -1,54 +1,70 @@
 import discord
 from discord.ext import commands
 import yt_dlp
+import re
+import os
 
-TOKEN = "DEIN_DISCORD_TOKEN"
+# =========================
+# TOKEN
+# =========================
+TOKEN = os.getenv("DISCORD_TOKEN")
 
+# =========================
+# INTENTS
+# =========================
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# =========================
+# QUEUE
+# =========================
 queue = []
 current = None
 
-ytdl_opts = {
+# =========================
+# YT-DLP SETTINGS
+# =========================
+ydl_opts = {
     "format": "bestaudio/best",
-    "quiet": True,
     "noplaylist": True,
+    "quiet": True,
 }
 
 ffmpeg_opts = {
     "options": "-vn"
 }
 
-ytdl = yt_dlp.YoutubeDL(ytdl_opts)
+ytdl = yt_dlp.YoutubeDL(ydl_opts)
 
-
-# -------------------------
-# AUDIO FETCH
-# -------------------------
+# =========================
+# EXTRACT AUDIO
+# =========================
 def get_audio(query):
     info = ytdl.extract_info(f"ytsearch:{query}", download=False)
-    info = info["entries"][0]
+    if "entries" in info:
+        info = info["entries"][0]
     return info["url"], info["title"]
 
+# =========================
+# VOICE JOIN
+# =========================
+async def join_voice(ctx):
+    if not ctx.author.voice:
+        await ctx.send("❌ Du bist in keinem Voice Channel")
+        return None
 
-# -------------------------
-# EMBED UI
-# -------------------------
-async def now_playing(ctx, title):
-    embed = discord.Embed(
-        title="🎵 Now Playing",
-        description=f"**{title}**",
-        color=0x1DB954
-    )
-    await ctx.send(embed=embed)
+    channel = ctx.author.voice.channel
 
+    if ctx.voice_client is None:
+        return await channel.connect()
 
-# -------------------------
+    return ctx.voice_client
+
+# =========================
 # PLAY NEXT
-# -------------------------
+# =========================
 async def play_next(ctx):
     global current
 
@@ -59,43 +75,30 @@ async def play_next(ctx):
     current = queue.pop(0)
 
     url, title = get_audio(current)
-
     voice = ctx.voice_client
 
     source = await discord.FFmpegOpusAudio.from_probe(url, **ffmpeg_opts)
 
-    def after_playing(error):
+    def after(error):
         bot.loop.create_task(play_next(ctx))
 
-    voice.play(source, after=after_playing)
+    voice.play(source, after=after)
 
-    await now_playing(ctx, title)
+    await ctx.send(f"🎵 Now Playing: **{title}**")
 
-
-# -------------------------
-# JOIN
-# -------------------------
-async def join(ctx):
-    if ctx.author.voice is None:
-        return None
-
-    channel = ctx.author.voice.channel
-
-    if ctx.voice_client is None:
-        return await channel.connect()
-
-    return ctx.voice_client
-
-
-# -------------------------
+# =========================
 # PLAY COMMAND
-# -------------------------
+# =========================
 @bot.command()
 async def play(ctx, *, query):
-    voice = await join(ctx)
-    if voice is None:
-        await ctx.send("❌ Du bist nicht im Voice Channel")
+    voice = await join_voice(ctx)
+    if not voice:
         return
+
+    # Spotify Link Support
+    match = re.search(r"track/([a-zA-Z0-9]+)", query)
+    if match:
+        query = f"spotify track {match.group(1)}"
 
     queue.append(query)
 
@@ -104,31 +107,18 @@ async def play(ctx, *, query):
     else:
         await ctx.send("➕ Zur Queue hinzugefügt")
 
-
-# -------------------------
-# CONTROL COMMANDS
-# -------------------------
+# =========================
+# SKIP
+# =========================
 @bot.command()
 async def skip(ctx):
-    if ctx.voice_client:
+    if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
         await ctx.send("⏭ Skip")
 
-
-@bot.command()
-async def pause(ctx):
-    if ctx.voice_client:
-        ctx.voice_client.pause()
-        await ctx.send("⏸ Paused")
-
-
-@bot.command()
-async def resume(ctx):
-    if ctx.voice_client:
-        ctx.voice_client.resume()
-        await ctx.send("▶ Resumed")
-
-
+# =========================
+# STOP
+# =========================
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
@@ -136,19 +126,22 @@ async def stop(ctx):
         ctx.voice_client.stop()
         await ctx.send("⛔ Stopped")
 
-
+# =========================
+# LEAVE
+# =========================
 @bot.command()
 async def leave(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
 
-
-# -------------------------
-# START
-# -------------------------
+# =========================
+# READY
+# =========================
 @bot.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
+    print(f"✅ Bot online als {bot.user}")
 
-
+# =========================
+# RUN
+# =========================
 bot.run(TOKEN)
