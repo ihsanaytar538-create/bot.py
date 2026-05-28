@@ -3,6 +3,8 @@ import os
 import re
 import requests
 import traceback
+import time
+import base64
 
 # =========================
 # TOKENS
@@ -13,28 +15,53 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 # =========================
-# SPOTIFY TOKEN
+# SPOTIFY TOKEN CACHE
 # =========================
+spotify_token = None
+spotify_token_time = 0
+
 def get_spotify_token():
+    global spotify_token, spotify_token_time
+
+    # Token 1 Stunde cachen
+    if spotify_token and time.time() - spotify_token_time < 3500:
+        return spotify_token
+
+    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+        print("❌ Spotify Keys fehlen!")
+        return None
+
     url = "https://accounts.spotify.com/api/token"
+
+    auth_string = f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}"
+    b64_auth = base64.b64encode(auth_string.encode()).decode()
+
+    headers = {
+        "Authorization": f"Basic {b64_auth}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
 
     data = {
         "grant_type": "client_credentials"
     }
 
-    response = requests.post(
-        url,
-        data=data,
-        auth=(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
-    )
+    response = requests.post(url, headers=headers, data=data)
 
-    result = response.json()
+    try:
+        result = response.json()
+    except:
+        print("❌ Token JSON Fehler:", response.text)
+        return None
 
-    if "access_token" not in result:
+    if response.status_code != 200:
         print("❌ Spotify Token Error:", result)
         return None
 
-    return result["access_token"]
+    spotify_token = result.get("access_token")
+    spotify_token_time = time.time()
+
+    return spotify_token
+
 
 # =========================
 # TRACK INFO
@@ -45,19 +72,22 @@ def get_track_info(track_id):
     if not token:
         return None
 
+    url = f"https://api.spotify.com/v1/tracks/{track_id}"
+
     headers = {
         "Authorization": f"Bearer {token}"
     }
 
-    url = f"https://api.spotify.com/v1/tracks/{track_id}"
-
     response = requests.get(url, headers=headers)
-    data = response.json()
 
-    print("SPOTIFY RESPONSE:", data)  # DEBUG
+    try:
+        data = response.json()
+    except:
+        print("❌ Track JSON Fehler:", response.text)
+        return None
 
-    if "name" not in data:
-        print("❌ Invalid track response:", data)
+    if response.status_code != 200:
+        print("❌ Spotify Track Error:", data)
         return None
 
     song_name = data["name"]
@@ -66,33 +96,27 @@ def get_track_info(track_id):
 
     return song_name, artist, cover
 
+
 # =========================
-# DISCORD SETUP
+# DISCORD BOT
 # =========================
 intents = discord.Intents.default()
 intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-# =========================
-# READY
-# =========================
+
 @client.event
 async def on_ready():
     print(f"✅ Bot online als {client.user}")
 
-# =========================
-# MESSAGE EVENT
-# =========================
+
 @client.event
 async def on_message(message):
 
     if message.author.bot:
         return
 
-    print("MESSAGE:", message.content)
-
-    # 🔥 ROBUSTER SPOTIFY LINK FIX (WICHTIG)
     match = re.search(r"spotify\.com/.*/track/([a-zA-Z0-9]+)", message.content)
 
     if not match:
@@ -104,18 +128,10 @@ async def on_message(message):
         result = get_track_info(track_id)
 
         if not result:
-            await message.reply("❌ Spotify API Fehler")
+            await message.reply("❌ Spotify API Fehler (siehe Console)")
             return
 
         song_name, artist, cover = result
-
-        audio_path = "songs/song.mp3"
-
-        if not os.path.exists(audio_path):
-            await message.reply("❌ keine mp3 gefunden")
-            return
-
-        file = discord.File(audio_path)
 
         embed = discord.Embed(
             title="🎵 Spotify Song erkannt",
@@ -124,16 +140,13 @@ async def on_message(message):
         )
 
         embed.set_thumbnail(url=cover)
-        embed.add_field(name="Spotify Link", value=message.content, inline=False)
-        embed.set_footer(text="▶ Bot aktiv")
+        embed.add_field(name="Link", value=message.content, inline=False)
 
-        await message.channel.send(embed=embed, file=file)
+        await message.channel.send(embed=embed)
 
     except Exception:
         print(traceback.format_exc())
-        await message.reply("❌ Fehler beim Verarbeiten")
+        await message.reply("❌ Unbekannter Fehler")
 
-# =========================
-# START
-# =========================
+
 client.run(DISCORD_TOKEN)
