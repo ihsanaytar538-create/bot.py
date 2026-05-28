@@ -1,57 +1,96 @@
-require('dotenv').config();
+import discord
+import os
+import requests
+import re
 
-const {
-  Client,
-  GatewayIntentBits,
-  AttachmentBuilder,
-  EmbedBuilder
-} = require('discord.js');
+# =========================
+# TOKENS
+# =========================
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
-const path = require('path');
+# =========================
+# DISCORD SETUP
+# =========================
+intents = discord.Intents.default()
+intents.message_content = True
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
-});
+client = discord.Client(intents=intents)
 
-client.once('ready', () => {
-  console.log(`✅ Eingeloggt als ${client.user.tag}`);
-});
+# =========================
+# READY
+# =========================
+@client.event
+async def on_ready():
+    print(f"✅ online als {client.user}")
 
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
+# =========================
+# MESSAGE EVENT
+# =========================
+@client.event
+async def on_message(message):
 
-  // Command: !play
-  if (message.content === '!play') {
+    if message.author.bot:
+        return
 
-    // MP3 Datei Pfad
-    const audioPath = path.join(__dirname, 'song.mp3');
+    text = message.content
 
-    // Audio Datei
-    const audioFile = new AttachmentBuilder(audioPath);
+    # =========================
+    # SPOTIFY LINK CHECK
+    # =========================
+    spotify_regex = r"(https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+)"
 
-    // Schönes Embed
-    const embed = new EmbedBuilder()
-      .setTitle('🎵 Jetzt läuft')
-      .setDescription('Travis Scott - FE!N')
-      .setColor(0x2F3136);
+    match = re.search(spotify_regex, text)
 
-    try {
+    if match:
 
-      // Datei direkt im Chat senden
-      await message.channel.send({
-        embeds: [embed],
-        files: [audioFile]
-      });
+        spotify_link = match.group(1)
 
-    } catch (err) {
-      console.error(err);
-      message.reply('❌ Fehler beim Senden der Audio-Datei.');
-    }
-  }
-});
+        # Beispiel Songdaten
+        # (Spotify API wäre komplizierter)
+        song_name = "spotify song"
+        artist = "unknown artist"
 
-client.login(process.env.TOKEN);
+        # MP3 Datei
+        audio_path = "songs/song.mp3"
+
+        # Prüfen ob Datei existiert
+        if not os.path.exists(audio_path):
+            await message.reply("❌ keine audio datei gefunden")
+            return
+
+        try:
+
+            # Discord Datei
+            file = discord.File(audio_path)
+
+            # Embed
+            embed = discord.Embed(
+                title="🎵 spotify erkannt",
+                description=f"**{song_name}**\nvon {artist}",
+                color=0x1DB954
+            )
+
+            embed.add_field(
+                name="spotify link",
+                value=spotify_link,
+                inline=False
+            )
+
+            embed.set_footer(
+                text="direkt im discord chat abspielbar"
+            )
+
+            # SENDEN
+            await message.channel.send(
+                embed=embed,
+                file=file
+            )
+
+        except Exception as e:
+            print(e)
+            await message.reply("❌ fehler")
+
+# =========================
+# BOT START
+# =========================
+client.run(DISCORD_TOKEN)
