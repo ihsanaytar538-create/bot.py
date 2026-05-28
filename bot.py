@@ -1,12 +1,65 @@
 import discord
 import os
-import requests
 import re
+import requests
 
 # =========================
-# TOKENS
+# DISCORD TOKEN
 # =========================
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+DISCORD_TOKEN = "DEIN_DISCORD_TOKEN"
+
+# =========================
+# SPOTIFY API
+# =========================
+SPOTIFY_CLIENT_ID = "DEINE_SPOTIFY_CLIENT_ID"
+SPOTIFY_CLIENT_SECRET = "DEIN_SPOTIFY_CLIENT_SECRET"
+
+# =========================
+# SPOTIFY TOKEN HOLEN
+# =========================
+def get_spotify_token():
+
+    url = "https://accounts.spotify.com/api/token"
+
+    data = {
+        "grant_type": "client_credentials"
+    }
+
+    response = requests.post(
+        url,
+        data=data,
+        auth=(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
+    )
+
+    result = response.json()
+
+    return result["access_token"]
+
+# =========================
+# SONG INFOS HOLEN
+# =========================
+def get_track_info(track_id):
+
+    token = get_spotify_token()
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    url = f"https://api.spotify.com/v1/tracks/{track_id}"
+
+    response = requests.get(
+        url,
+        headers=headers
+    )
+
+    data = response.json()
+
+    song_name = data["name"]
+    artist = data["artists"][0]["name"]
+    cover = data["album"]["images"][0]["url"]
+
+    return song_name, artist, cover
 
 # =========================
 # DISCORD SETUP
@@ -21,7 +74,7 @@ client = discord.Client(intents=intents)
 # =========================
 @client.event
 async def on_ready():
-    print(f"✅ online als {client.user}")
+    print(f"✅ bot online als {client.user}")
 
 # =========================
 # MESSAGE EVENT
@@ -35,49 +88,49 @@ async def on_message(message):
     text = message.content
 
     # =========================
-    # SPOTIFY LINK CHECK
+    # SPOTIFY LINK ERKENNEN
     # =========================
-    spotify_regex = r"(https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+)"
+    spotify_regex = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
 
     match = re.search(spotify_regex, text)
 
     if match:
 
-        spotify_link = match.group(1)
-
-        # Beispiel Songdaten
-        # (Spotify API wäre komplizierter)
-        song_name = "spotify song"
-        artist = "unknown artist"
-
-        # MP3 Datei
-        audio_path = "songs/song.mp3"
-
-        # Prüfen ob Datei existiert
-        if not os.path.exists(audio_path):
-            await message.reply("❌ keine audio datei gefunden")
-            return
+        track_id = match.group(1)
 
         try:
 
-            # Discord Datei
+            # SONG DATEN
+            song_name, artist, cover = get_track_info(track_id)
+
+            # MP3 DATEI
+            audio_path = "songs/song.mp3"
+
+            # DATEI EXISTIERT?
+            if not os.path.exists(audio_path):
+                await message.reply("❌ keine mp3 gefunden")
+                return
+
+            # DISCORD DATEI
             file = discord.File(audio_path)
 
-            # Embed
+            # EMBED
             embed = discord.Embed(
-                title="🎵 spotify erkannt",
+                title="🎵 spotify song erkannt",
                 description=f"**{song_name}**\nvon {artist}",
                 color=0x1DB954
             )
 
+            embed.set_thumbnail(url=cover)
+
             embed.add_field(
                 name="spotify link",
-                value=spotify_link,
+                value=match.group(0),
                 inline=False
             )
 
             embed.set_footer(
-                text="direkt im discord chat abspielbar"
+                text="▶ direkt im discord chat abspielbar"
             )
 
             # SENDEN
@@ -88,7 +141,7 @@ async def on_message(message):
 
         except Exception as e:
             print(e)
-            await message.reply("❌ fehler")
+            await message.reply("❌ spotify fehler")
 
 # =========================
 # BOT START
