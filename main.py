@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 import yt_dlp
-import asyncio
 import os
 
 intents = discord.Intents.default()
@@ -41,14 +40,20 @@ class MusicView(discord.ui.View):
             await self.start_music(interaction)
 
     async def start_music(self, interaction):
-        vc = self.ctx.voice_client
 
+        ctx = self.ctx
+        vc = ctx.voice_client
+
+        # Wenn Bot nicht im Voice ist → joinen
         if not vc:
-            channel = self.ctx.author.voice.channel
+            if not ctx.author.voice:
+                return await ctx.send("❌ Du bist in keinem Voice Channel!")
+
+            channel = ctx.author.voice.channel
             vc = await channel.connect()
 
         ydl_opts = {
-            "format": "bestaudio",
+            "format": "bestaudio/best",
             "noplaylist": True
         }
 
@@ -56,13 +61,19 @@ class MusicView(discord.ui.View):
             info = ydl.extract_info(self.url, download=False)
             audio_url = info["url"]
 
-        # FIX: kein await hier
-        source = discord.FFmpegOpusAudio.from_probe(audio_url)
+        ffmpeg_options = {
+            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "options": "-vn"
+        }
 
-        vc.stop()
+        source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+
+        if vc.is_playing():
+            vc.stop()
+
         vc.play(source)
 
-        await interaction.channel.send("🎶 Musik gestartet!")
+        await interaction.channel.send("🎶 Musik läuft im Voice Channel!")
 
         self.stop()
 
@@ -71,7 +82,7 @@ class MusicView(discord.ui.View):
 async def play(ctx, url: str):
 
     if not ctx.author.voice:
-        return await ctx.send("❌ Du bist in keinem Voice Channel!")
+        return await ctx.send("❌ Du musst in einem Voice Channel sein!")
 
     view = MusicView(url, ctx)
 
@@ -88,5 +99,5 @@ async def stop(ctx):
         await ctx.send("⏹️ Gestoppt")
 
 
-# FIX: Token über ENV
+# 🔑 TOKEN aus ENV laden
 bot.run(os.getenv("DISCORD_TOKEN"))
