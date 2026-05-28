@@ -2,9 +2,10 @@ import discord
 import os
 import re
 import requests
+import traceback
 
 # =========================
-# TOKENS AUS RAILWAY
+# TOKENS
 # =========================
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -12,10 +13,9 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 # =========================
-# SPOTIFY TOKEN HOLEN
+# SPOTIFY TOKEN
 # =========================
 def get_spotify_token():
-
     url = "https://accounts.spotify.com/api/token"
 
     data = {
@@ -30,14 +30,20 @@ def get_spotify_token():
 
     result = response.json()
 
+    if "access_token" not in result:
+        print("Spotify Token Error:", result)
+        return None
+
     return result["access_token"]
 
 # =========================
-# SONG INFOS HOLEN
+# TRACK INFO
 # =========================
 def get_track_info(track_id):
-
     token = get_spotify_token()
+
+    if not token:
+        return None
 
     headers = {
         "Authorization": f"Bearer {token}"
@@ -45,12 +51,12 @@ def get_track_info(track_id):
 
     url = f"https://api.spotify.com/v1/tracks/{track_id}"
 
-    response = requests.get(
-        url,
-        headers=headers
-    )
-
+    response = requests.get(url, headers=headers)
     data = response.json()
+
+    if "name" not in data:
+        print("Spotify Track Error:", data)
+        return None
 
     song_name = data["name"]
     artist = data["artists"][0]["name"]
@@ -71,7 +77,7 @@ client = discord.Client(intents=intents)
 # =========================
 @client.event
 async def on_ready():
-    print(f"✅ bot online als {client.user}")
+    print(f"✅ Bot online als {client.user}")
 
 # =========================
 # MESSAGE EVENT
@@ -82,65 +88,50 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    text = message.content
+    print("MESSAGE:", message.content)
 
-    # =========================
-    # SPOTIFY LINK CHECK
-    # =========================
-    spotify_regex = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
+    # ROBUSTER SPOTIFY MATCH (wichtig!)
+    match = re.search(r"track/([a-zA-Z0-9]+)", message.content)
 
-    match = re.search(spotify_regex, text)
+    if not match:
+        return
 
-    if match:
+    track_id = match.group(1)
 
-        track_id = match.group(1)
+    try:
+        result = get_track_info(track_id)
 
-        try:
+        if not result:
+            await message.reply("❌ Spotify API Fehler")
+            return
 
-            # SONG DATEN HOLEN
-            song_name, artist, cover = get_track_info(track_id)
+        song_name, artist, cover = result
 
-            # AUDIO DATEI
-            audio_path = "songs/song.mp3"
+        audio_path = "songs/song.mp3"
 
-            # EXISTIERT DIE DATEI?
-            if not os.path.exists(audio_path):
-                await message.reply("❌ keine mp3 gefunden")
-                return
+        if not os.path.exists(audio_path):
+            await message.reply("❌ keine mp3 gefunden")
+            return
 
-            # DATEI SENDEN
-            file = discord.File(audio_path)
+        file = discord.File(audio_path)
 
-            # EMBED
-            embed = discord.Embed(
-                title="🎵 spotify song erkannt",
-                description=f"**{song_name}**\nvon {artist}",
-                color=0x1DB954
-            )
+        embed = discord.Embed(
+            title="🎵 Spotify Song erkannt",
+            description=f"**{song_name}**\nvon {artist}",
+            color=0x1DB954
+        )
 
-            embed.set_thumbnail(url=cover)
+        embed.set_thumbnail(url=cover)
+        embed.add_field(name="Spotify Link", value=message.content, inline=False)
+        embed.set_footer(text="▶ Bot aktiv")
 
-            embed.add_field(
-                name="spotify link",
-                value=match.group(0),
-                inline=False
-            )
+        await message.channel.send(embed=embed, file=file)
 
-            embed.set_footer(
-                text="▶ direkt im discord chat abspielbar"
-            )
-
-            # SENDEN
-            await message.channel.send(
-                embed=embed,
-                file=file
-            )
-
-        except Exception as e:
-            print(e)
-            await message.reply("❌ spotify fehler")
+    except Exception:
+        print(traceback.format_exc())
+        await message.reply("❌ Fehler beim Verarbeiten")
 
 # =========================
-# BOT START
+# START
 # =========================
 client.run(DISCORD_TOKEN)
