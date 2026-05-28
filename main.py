@@ -4,7 +4,7 @@ import re
 import requests
 
 # =========================
-# TOKENS AUS RAILWAY
+# TOKENS
 # =========================
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -12,15 +12,22 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 # =========================
-# NUR 1 CHANNEL ERLAUBT
+# CHANNEL LIMIT
 # =========================
-ALLOWED_CHANNEL_ID = 1509380855586361454 # <-- HIER DEINE CHANNEL ID EINTRAGEN
+ALLOWED_CHANNEL_ID = 1509380855586361454
 
 # =========================
-# SPOTIFY TOKEN HOLEN
+# DISCORD INTENTS
+# =========================
+intents = discord.Intents.default()
+intents.message_content = True
+
+client = discord.Client(intents=intents)
+
+# =========================
+# SPOTIFY TOKEN
 # =========================
 def get_spotify_token():
-
     url = "https://accounts.spotify.com/api/token"
 
     data = {
@@ -33,14 +40,15 @@ def get_spotify_token():
         auth=(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)
     )
 
+    response.raise_for_status()
     result = response.json()
+
     return result["access_token"]
 
 # =========================
-# SONG INFOS HOLEN
+# TRACK INFO
 # =========================
 def get_track_info(track_id):
-
     token = get_spotify_token()
 
     headers = {
@@ -48,8 +56,9 @@ def get_track_info(track_id):
     }
 
     url = f"https://api.spotify.com/v1/tracks/{track_id}"
-
     response = requests.get(url, headers=headers)
+    response.raise_for_status()
+
     data = response.json()
 
     song_name = data["name"]
@@ -59,19 +68,11 @@ def get_track_info(track_id):
     return song_name, artist, cover
 
 # =========================
-# DISCORD SETUP
-# =========================
-intents = discord.Intents.default()
-intents.message_content = True
-
-client = discord.Client(intents=intents)
-
-# =========================
 # READY
 # =========================
 @client.event
 async def on_ready():
-    print(f"✅ bot online als {client.user}")
+    print(f"Bot online als {client.user}")
 
 # =========================
 # MESSAGE EVENT
@@ -79,59 +80,53 @@ async def on_ready():
 @client.event
 async def on_message(message):
 
+    # Debug (SEHR WICHTIG)
+    print("MSG:", message.content, "CHANNEL:", message.channel.id)
+
     if message.author.bot:
         return
 
-    # ❌ NUR EIN CHANNEL
     if message.channel.id != ALLOWED_CHANNEL_ID:
         return
 
     text = message.content
 
-    # Spotify Link Regex
     spotify_regex = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
     match = re.search(spotify_regex, text)
 
-    if match:
+    if not match:
+        return
 
-        track_id = match.group(1)
+    track_id = match.group(1)
 
-        try:
-            song_name, artist, cover = get_track_info(track_id)
+    try:
+        song_name, artist, cover = get_track_info(track_id)
 
-            audio_path = "songs/song.mp3"
+        audio_path = "songs/song.mp3"
 
-            if not os.path.exists(audio_path):
-                await message.reply("❌ keine mp3 gefunden")
-                return
+        if not os.path.exists(audio_path):
+            await message.reply("❌ keine mp3 gefunden")
+            return
 
-            file = discord.File(audio_path)
+        file = discord.File(audio_path)
 
-            embed = discord.Embed(
-                title="🎵 Spotify Song erkannt",
-                description=f"**{song_name}**\nvon {artist}",
-                color=0x1DB954
-            )
+        embed = discord.Embed(
+            title="🎵 Spotify Song erkannt",
+            description=f"**{song_name}**\nvon {artist}",
+            color=0x1DB954
+        )
 
-            embed.set_thumbnail(url=cover)
+        embed.set_thumbnail(url=cover)
+        embed.add_field(name="Spotify Link", value=match.group(0), inline=False)
+        embed.set_footer(text="▶ direkt im Discord Chat")
 
-            embed.add_field(
-                name="Spotify Link",
-                value=match.group(0),
-                inline=False
-            )
+        await message.channel.send(embed=embed, file=file)
 
-            embed.set_footer(
-                text="▶ direkt im discord chat abspielbar"
-            )
-
-            await message.channel.send(embed=embed, file=file)
-
-        except Exception as e:
-            print(e)
-            await message.reply("❌ spotify fehler")
+    except Exception as e:
+        print("ERROR:", e)
+        await message.reply("❌ Spotify Fehler")
 
 # =========================
-# BOT START
+# START
 # =========================
 client.run(DISCORD_TOKEN)
