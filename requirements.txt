@@ -1,3 +1,5 @@
 discord.py
 requests
-yt_dlp
+discord.py[voice]
+yt-dlp
+PyNaCl
