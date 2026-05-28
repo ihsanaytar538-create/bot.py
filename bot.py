@@ -9,6 +9,11 @@ import requests
 DISCORD_TOKEN = "DEIN_DISCORD_TOKEN"
 
 # =========================
+# GROQCLOUD KEY
+# =========================
+GROQ_API_KEY = "DEIN_GROQCLOUD_API_KEY"
+
+# =========================
 # SPOTIFY API
 # =========================
 SPOTIFY_CLIENT_ID = "DEINE_SPOTIFY_CLIENT_ID"
@@ -88,7 +93,7 @@ async def on_message(message):
     text = message.content
 
     # =========================
-    # SPOTIFY LINK ERKENNEN
+    # SPOTIFY LINK CHECK
     # =========================
     spotify_regex = r"https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)"
 
