@@ -20,6 +20,28 @@ SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 spotify_token = None
 spotify_token_time = 0
 
+import discord
+import os
+import re
+import requests
+import traceback
+import time
+import base64
+
+# =========================
+# TOKENS
+# =========================
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+
+# =========================
+# SPOTIFY TOKEN CACHE
+# =========================
+spotify_token = None
+spotify_token_time = 0
+
 def get_spotify_token():
     global spotify_token, spotify_token_time
 
