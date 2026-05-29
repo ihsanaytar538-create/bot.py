@@ -3,39 +3,48 @@ from discord.ext import commands
 import yt_dlp
 import os
 
-# ---------- INTENTS ----------
+# ---------------- INTENTS ----------------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ---------- READY ----------
+# ---------------- READY ----------------
 @bot.event
 async def on_ready():
     print(f"✅ Online als {bot.user}")
 
-# ---------- PLAY ----------
+# ---------------- TEST ----------------
+@bot.command()
+async def test(ctx):
+    await ctx.send("✅ Bot funktioniert!")
+
+# ---------------- PLAY ----------------
 @bot.command()
 async def play(ctx, url: str):
 
+    # User muss im Voice sein
     if not ctx.author.voice:
         await ctx.send("❌ Du musst in einem Voice Channel sein!")
         return
 
     channel = ctx.author.voice.channel
 
-    # connect
     vc = ctx.voice_client
 
-    if vc is None:
-        vc = await channel.connect()
-    else:
-        await vc.move_to(channel)
-
-    await ctx.send("🔄 Lade Musik...")
-
     try:
+        # Bot verbinden
+        if vc is None:
+            vc = await channel.connect()
+
+        # Nur moven wenn anderer Channel
+        elif vc.channel != channel:
+            await vc.move_to(channel)
+
+        await ctx.send("🔄 Lade Musik...")
+
+        # YouTube laden
         ydl_opts = {
             "format": "bestaudio",
             "noplaylist": True,
@@ -57,9 +66,11 @@ async def play(ctx, url: str):
             **ffmpeg_options
         )
 
+        # Alte Musik stoppen
         if vc.is_playing():
             vc.stop()
 
+        # Musik starten
         vc.play(source)
 
         await ctx.send(f"🎶 Spiele jetzt: {info['title']}")
@@ -68,17 +79,18 @@ async def play(ctx, url: str):
         print("PLAY ERROR:", e)
         await ctx.send(f"❌ Fehler: {e}")
 
-# ---------- STOP ----------
+# ---------------- STOP ----------------
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("⏹️ Musik gestoppt")
 
-# ---------- TEST ----------
-@bot.command()
-async def test(ctx):
-    await ctx.send("✅ Bot funktioniert!")
+# ---------------- ERROR ----------------
+@bot.event
+async def on_command_error(ctx, error):
+    print("ERROR:", error)
+    await ctx.send(f"❌ Fehler: {error}")
 
-# ---------- START ----------
+# ---------------- START ----------------
 bot.run(os.getenv("DISCORD_TOKEN"))
