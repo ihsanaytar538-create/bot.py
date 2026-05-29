@@ -1,12 +1,5 @@
-FROM python:3.11-slim
-
-RUN apt-get update && apt-get install -y ffmpeg
-
+FROM eclipse-temurin:17-jre
 WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-CMD ["python", "main.py"]
+RUN curl -L -o Lavalink.jar https://github.com/lavalink-devs/Lavalink/releases/latest/download/Lavalink.jar
+COPY application.yml .
+CMD ["java", "-jar", "Lavalink.jar"]
