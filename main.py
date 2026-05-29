@@ -3,80 +3,82 @@ from discord.ext import commands
 import yt_dlp
 import os
 
-# ---------------- INTENTS ----------------
+# ---------- INTENTS ----------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ---------------- READY ----------------
+# ---------- READY ----------
 @bot.event
 async def on_ready():
     print(f"✅ Online als {bot.user}")
 
-
-# ---------------- ERROR HANDLING ----------------
-@bot.event
-async def on_command_error(ctx, error):
-    await ctx.send(f"❌ Fehler: {error}")
-    print("ERROR:", error)
-
-
-# ---------------- PLAY COMMAND ----------------
+# ---------- PLAY ----------
 @bot.command()
 async def play(ctx, url: str):
 
     if not ctx.author.voice:
-        return await ctx.send("❌ Du musst in einem Voice Channel sein!")
+        await ctx.send("❌ Du musst in einem Voice Channel sein!")
+        return
 
     channel = ctx.author.voice.channel
+
+    # connect
     vc = ctx.voice_client
 
-    try:
-        # Voice join / move
-        if not vc:
-            vc = await channel.connect()
-        elif vc.channel != channel:
-            await vc.move_to(channel)
+    if vc is None:
+        vc = await channel.connect()
+    else:
+        await vc.move_to(channel)
 
-        # YouTube extract
+    await ctx.send("🔄 Lade Musik...")
+
+    try:
         ydl_opts = {
-            "format": "bestaudio/best",
-            "noplaylist": True
+            "format": "bestaudio",
+            "noplaylist": True,
+            "quiet": True
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            audio_url = info["url"]
+            stream_url = info["url"]
 
         ffmpeg_options = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn"
         }
 
-        # IMPORTANT: FFmpeg Audio
-        source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
+        source = discord.FFmpegPCMAudio(
+            stream_url,
+            executable="ffmpeg",
+            **ffmpeg_options
+        )
 
         if vc.is_playing():
             vc.stop()
 
         vc.play(source)
 
-        await ctx.send("🎶 Jetzt läuft Musik im Voice Channel!")
+        await ctx.send(f"🎶 Spiele jetzt: {info['title']}")
 
     except Exception as e:
-        await ctx.send(f"❌ Play Error: {e}")
         print("PLAY ERROR:", e)
+        await ctx.send(f"❌ Fehler: {e}")
 
-
-# ---------------- STOP ----------------
+# ---------- STOP ----------
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("⏹️ Gestoppt")
+        await ctx.send("⏹️ Musik gestoppt")
 
+# ---------- TEST ----------
+@bot.command()
+async def test(ctx):
+    await ctx.send("✅ Bot funktioniert!")
 
-# ---------------- RUN BOT ----------------
+# ---------- START ----------
 bot.run(os.getenv("DISCORD_TOKEN"))
