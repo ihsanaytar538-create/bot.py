@@ -1,7 +1,9 @@
 import discord
 from discord.ext import commands
-import yt_dlp
 import os
+import yt_dlp
+
+print("🚀 STARTING BOT...")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -9,52 +11,76 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# ---------------- READY ----------------
 @bot.event
 async def on_ready():
-    print(f"Online als {bot.user}")
+    print(f"✅ BOT ONLINE: {bot.user}")
 
+# ---------------- TEST ----------------
 @bot.command()
-async def play(ctx, *, url: str):
+async def ping(ctx):
+    print("PING COMMAND RECEIVED")
+    await ctx.send("pong 🟢")
+
+# ---------------- PLAY ----------------
+@bot.command()
+async def play(ctx, *, url):
+
+    print(f"PLAY COMMAND: {url}")
 
     if not ctx.author.voice:
         return await ctx.send("❌ Geh in Voice!")
 
     channel = ctx.author.voice.channel
-    vc = ctx.voice_client
 
+    vc = ctx.voice_client
     if vc is None:
         vc = await channel.connect()
     else:
         await vc.move_to(channel)
 
-    await ctx.send("🎶 Lade...")
+    await ctx.send("🎶 Lade Musik...")
 
     ydl_opts = {
         "format": "bestaudio",
         "quiet": True
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
 
-    audio_url = info["url"]
+        stream_url = info["url"]
 
-    ffmpeg = discord.FFmpegPCMAudio(
-        audio_url,
-        executable="/usr/bin/ffmpeg",
-        options="-vn"
-    )
+        ffmpeg_options = {
+            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "options": "-vn"
+        }
 
-    if vc.is_playing():
-        vc.stop()
+        source = discord.FFmpegPCMAudio(stream_url, **ffmpeg_options)
 
-    vc.play(ffmpeg)
+        if vc.is_playing():
+            vc.stop()
 
-    await ctx.send("▶️ Spielt: " + info.get("title", "Song"))
+        vc.play(source)
 
+        await ctx.send(f"▶️ Jetzt spielt: {info.get('title')}")
+
+    except Exception as e:
+        print("❌ ERROR:", e)
+        await ctx.send(f"❌ Fehler: {e}")
+
+# ---------------- STOP ----------------
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
+        await ctx.send("⏹️ Stopped")
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+# ---------------- RUN ----------------
+token = os.getenv("DISCORD_TOKEN")
+
+if not token:
+    print("❌ KEIN TOKEN GESETZT!")
+else:
+    bot.run(token)
