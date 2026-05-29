@@ -3,6 +3,7 @@ from discord.ext import commands
 import yt_dlp
 import os
 
+# ---------------- INTENTS ----------------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
@@ -30,7 +31,7 @@ async def play(ctx, *, url: str):
     vc = ctx.voice_client
 
     try:
-        # connect / move
+        # Connect / Move
         if vc is None:
             vc = await channel.connect()
         elif vc.channel != channel:
@@ -38,23 +39,24 @@ async def play(ctx, *, url: str):
 
         await ctx.send("🔄 Lade Musik...")
 
-        # 🔥 STABILER YT-DLP FIX
-        with yt_dlp.YoutubeDL({
+        # yt-dlp
+        ydl_opts = {
             "format": "bestaudio[ext=webm]/bestaudio/best",
             "noplaylist": True,
             "quiet": True
-        }) as ydl:
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
-        # 🔥 WICHTIG: stabiler Audio-Stream
+        # stabiler Audio Stream
         audio_url = None
-
-        for f in info["formats"]:
-            if f.get("acodec") != "none":
+        for f in info.get("formats", []):
+            if f.get("acodec") != "none" and f.get("url"):
                 audio_url = f["url"]
                 break
 
-        if audio_url is None:
+        if not audio_url:
             return await ctx.send("❌ Kein Audio gefunden")
 
         ffmpeg_options = {
@@ -62,9 +64,10 @@ async def play(ctx, *, url: str):
             "options": "-vn"
         }
 
+        # 🔥 WICHTIG: absoluter ffmpeg Pfad (Railway Fix)
         source = discord.FFmpegPCMAudio(
             audio_url,
-            executable="ffmpeg",
+            executable="/usr/bin/ffmpeg",
             **ffmpeg_options
         )
 
