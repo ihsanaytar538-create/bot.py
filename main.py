@@ -1,9 +1,9 @@
 import discord
 from discord.ext import commands
-import os
 import yt_dlp
+import os
 
-print("🚀 STARTING BOT...")
+print("🚀 Bot startet...")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -14,26 +14,21 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ---------------- READY ----------------
 @bot.event
 async def on_ready():
-    print(f"✅ BOT ONLINE: {bot.user}")
-
-# ---------------- TEST ----------------
-@bot.command()
-async def ping(ctx):
-    print("PING COMMAND RECEIVED")
-    await ctx.send("pong 🟢")
+    print(f"✅ Online als {bot.user}")
 
 # ---------------- PLAY ----------------
 @bot.command()
-async def play(ctx, *, url):
+async def play(ctx, *, url: str):
 
-    print(f"PLAY COMMAND: {url}")
+    print("🎵 play command:", url)
 
     if not ctx.author.voice:
-        return await ctx.send("❌ Geh in Voice!")
+        return await ctx.send("❌ Du musst im Voice Channel sein!")
 
     channel = ctx.author.voice.channel
 
     vc = ctx.voice_client
+
     if vc is None:
         vc = await channel.connect()
     else:
@@ -64,7 +59,7 @@ async def play(ctx, *, url):
 
         vc.play(source)
 
-        await ctx.send(f"▶️ Jetzt spielt: {info.get('title')}")
+        await ctx.send("▶️ Jetzt spielt: " + info.get("title", "Unbekannt"))
 
     except Exception as e:
         print("❌ ERROR:", e)
@@ -75,12 +70,12 @@ async def play(ctx, *, url):
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("⏹️ Stopped")
+        await ctx.send("⏹️ Gestoppt")
 
 # ---------------- RUN ----------------
 token = os.getenv("DISCORD_TOKEN")
 
 if not token:
-    print("❌ KEIN TOKEN GESETZT!")
+    print("❌ DISCORD_TOKEN fehlt!")
 else:
     bot.run(token)
