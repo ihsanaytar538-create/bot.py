@@ -19,13 +19,9 @@ async def on_ready():
 async def test(ctx):
     await ctx.send("✅ Bot funktioniert!")
 
-# ---------------- PLAY COMMAND ----------------
+# ---------------- PLAY ----------------
 @bot.command()
 async def play(ctx, *, url: str):
-    """
-    Benutzung:
-    !play <youtube link>
-    """
 
     if not ctx.author.voice:
         return await ctx.send("❌ Du musst in einem Voice Channel sein!")
@@ -42,16 +38,24 @@ async def play(ctx, *, url: str):
 
         await ctx.send("🔄 Lade Musik...")
 
-        # yt-dlp config
-        ydl_opts = {
-            "format": "bestaudio/best",
+        # 🔥 STABILER YT-DLP FIX
+        with yt_dlp.YoutubeDL({
+            "format": "bestaudio[ext=webm]/bestaudio/best",
             "noplaylist": True,
             "quiet": True
-        }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        }) as ydl:
             info = ydl.extract_info(url, download=False)
-            audio_url = info["url"]
+
+        # 🔥 WICHTIG: stabiler Audio-Stream
+        audio_url = None
+
+        for f in info["formats"]:
+            if f.get("acodec") != "none":
+                audio_url = f["url"]
+                break
+
+        if audio_url is None:
+            return await ctx.send("❌ Kein Audio gefunden")
 
         ffmpeg_options = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10",
