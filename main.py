@@ -1,75 +1,36 @@
 import discord
 from discord.ext import commands
-import yt_dlp
+import wavelink
 import os
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.voice_states = True
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-# ---------------- READY ----------------
 @bot.event
 async def on_ready():
-    print(f"✅ Online als {bot.user}")
+    print("Bot online")
 
-# ---------------- PLAY ----------------
+    await wavelink.NodePool.create_node(
+        bot=bot,
+        uri="http://DEINE-RAILWAY-URL:2333",
+        password="123456"
+    )
+
 @bot.command()
-async def play(ctx, *, url: str):
+async def play(ctx, *, query: str):
 
     if not ctx.author.voice:
-        return await ctx.send("❌ Geh zuerst in einen Voice Channel!")
-
-    channel = ctx.author.voice.channel
+        return await ctx.send("Geh in Voice!")
 
     vc = ctx.voice_client
-    if vc is None:
-        vc = await channel.connect()
-    else:
-        await vc.move_to(channel)
 
-    await ctx.send("🎶 Lade Musik...")
+    if not vc:
+        vc = await ctx.author.voice.channel.connect(cls=wavelink.Player)
 
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "quiet": True
-    }
+    tracks = await wavelink.YouTubeTrack.search(query)
+    track = tracks[0]
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+    await vc.play(track)
 
-        audio_url = info["url"]
+    await ctx.send("🎶 spielt: " + track.title)
 
-        ffmpeg_options = {
-            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10",
-            "options": "-vn"
-        }
-
-        source = discord.FFmpegPCMAudio(
-            audio_url,
-            executable="/usr/bin/ffmpeg",
-            **ffmpeg_options
-        )
-
-        if vc.is_playing():
-            vc.stop()
-
-        vc.play(source)
-
-        await ctx.send(f"▶️ Jetzt spielt: {info.get('title', 'Unbekannt')}")
-
-    except Exception as e:
-        print("ERROR:", e)
-        await ctx.send(f"❌ Fehler: {e}")
-
-# ---------------- STOP ----------------
-@bot.command()
-async def stop(ctx):
-    if ctx.voice_client:
-        await ctx.voice_client.disconnect()
-        await ctx.send("⏹️ Gestoppt")
-
-# ---------------- RUN ----------------
 bot.run(os.getenv("DISCORD_TOKEN"))
